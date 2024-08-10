@@ -1,4 +1,4 @@
-## Hi there 👋
+## Hello there.
 
 <!--
 **TECHCOMDN38416/TECHCOMDN38416** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
