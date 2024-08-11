@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map with Continuous Location Tracking and Frequent Refresh</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        #map {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 999;
+            pointer-events: none;
+        }
+        #location-button {
+            position: absolute;
+            bottom: 50px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <canvas id="canvas"></canvas>
+    <div id="location-button">Current Location</div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        var map = L.map('map').setView([42.3601, -71.0589], 13);
+        var isAutoSnapping = true; // Flag to control auto-snapping behavior
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let revealedAreas = [];
+        const revealRadius = 12.5; // Further reduced reveal radius
+
+        function resizeCanvas() {
+            canvas.width = map.getSize().x;
+            canvas.height = map.getSize().y;
+            drawFogOfWar();
+        }
+
+        function drawFogOfWar() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            revealedAreas.forEach(area => {
+                const mapCenter = map.latLngToContainerPoint(area.latLng);
+                const adjustedRadius = area.radius / map.getZoomScale(area.zoom, map.getZoom());
+                revealMap(mapCenter.x, mapCenter.y, adjustedRadius, true);
+            });
+        }
+
+        function revealMap(x, y, radius, skipSave = false) {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2, true);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+
+            if (!skipSave) {
+                const latLng = map.containerPointToLatLng([x, y]);
+                revealedAreas.push({ latLng: latLng, radius: radius, zoom: map.getZoom() });
+            }
+        }
+
+        map.on('resize', resizeCanvas);
+        map.on('moveend', drawFogOfWar);
+        map.on('zoomend', drawFogOfWar);
+
+        function updateUserLocation(position, forceSnap = false) {
+            var lat = position.coords.latitude;
+            var lng = position.coords.longitude;
+            var userPosition = map.latLngToContainerPoint([lat, lng]);
+
+            revealMap(userPosition.x, userPosition.y, revealRadius);
+
+            // Snap to the user's location if auto-snapping is enabled or forced
+            if (isAutoSnapping || forceSnap) {
+                map.setView([lat, lng], map.getZoom(), { animate: false }); // Set view without animation to ensure it snaps immediately
+            }
+        }
+
+        // Watch the user's position and update the map accordingly
+        navigator.geolocation.watchPosition(function(position) {
+            if (isAutoSnapping) {
+                updateUserLocation(position);
+            }
+        }, function(error) {
+            console.error("Error watching location:", error);
+        });
+
+        // Handle initial auto-snap on page load
+        navigator.geolocation.getCurrentPosition(function(position) {
+            updateUserLocation(position, true); // Force snap on initial load
+        });
+
+        // "Current Location" button snaps to the user's location and enables auto-snapping
+        document.getElementById('location-button').addEventListener('click', function() {
+            isAutoSnapping = true;
+            navigator.geolocation.getCurrentPosition(function(position) {
+                updateUserLocation(position, true);
+                setTimeout(() => {
+                    map.invalidateSize();  // Force the map to re-render
+                }, 100); // Small delay to ensure the position is set before rendering
+            }, function(error) {
+                console.error("Error obtaining location:", error);
+                alert("Unable to retrieve your location. Please check your GPS settings.");
+            });
+        });
+
+        // Disable auto-snapping when the user manually moves the map
+        map.on('movestart', function() {
+            isAutoSnapping = false;
+        });
+
+        // Force map refresh when the tab becomes visible again
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') {
+                map.invalidateSize();
+            }
+        });
+
+        // Periodic refresh every 1 second to ensure map stays updated
+        setInterval(function() {
+            map.invalidateSize();
+        }, 1000);
+
+        resizeCanvas();
+    </script>
+</body>
+</html>
