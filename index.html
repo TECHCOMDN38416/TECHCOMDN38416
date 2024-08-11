@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Map with Continuous Location Tracking and Frequent Refresh</title>
+    <title>Map with Flask Integration</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <style>
         #map {
@@ -87,9 +87,7 @@
         map.on('moveend', drawFogOfWar);
         map.on('zoomend', drawFogOfWar);
 
-        function updateUserLocation(position, forceSnap = false) {
-            var lat = position.coords.latitude;
-            var lng = position.coords.longitude;
+        function updateUserLocation(lat, lng, forceSnap = false) {
             var userPosition = map.latLngToContainerPoint([lat, lng]);
 
             revealMap(userPosition.x, userPosition.y, revealRadius);
@@ -100,50 +98,37 @@
             }
         }
 
-        // Watch the user's position and update the map accordingly
-        navigator.geolocation.watchPosition(function(position) {
+        function fetchLocation(forceSnap = false) {
+            fetch('/location')
+                .then(response => response.json())
+                .then(data => {
+                    const lat = data.latitude;
+                    const lng = data.longitude;
+                    updateUserLocation(lat, lng, forceSnap);
+                })
+                .catch(error => console.error("Error fetching location:", error));
+        }
+
+        // Fetch location every 1 second
+        setInterval(() => {
             if (isAutoSnapping) {
-                updateUserLocation(position);
+                fetchLocation();
             }
-        }, function(error) {
-            console.error("Error watching location:", error);
-        });
+        }, 1000);
 
         // Handle initial auto-snap on page load
-        navigator.geolocation.getCurrentPosition(function(position) {
-            updateUserLocation(position, true); // Force snap on initial load
-        });
+        fetchLocation(true); // Force snap on initial load
 
         // "Current Location" button snaps to the user's location and enables auto-snapping
         document.getElementById('location-button').addEventListener('click', function() {
             isAutoSnapping = true;
-            navigator.geolocation.getCurrentPosition(function(position) {
-                updateUserLocation(position, true);
-                setTimeout(() => {
-                    map.invalidateSize();  // Force the map to re-render
-                }, 100); // Small delay to ensure the position is set before rendering
-            }, function(error) {
-                console.error("Error obtaining location:", error);
-                alert("Unable to retrieve your location. Please check your GPS settings.");
-            });
+            fetchLocation(true); // Force snap when button is clicked
         });
 
         // Disable auto-snapping when the user manually moves the map
         map.on('movestart', function() {
             isAutoSnapping = false;
         });
-
-        // Force map refresh when the tab becomes visible again
-        document.addEventListener('visibilitychange', function() {
-            if (document.visibilityState === 'visible') {
-                map.invalidateSize();
-            }
-        });
-
-        // Periodic refresh every 1 second to ensure map stays updated
-        setInterval(function() {
-            map.invalidateSize();
-        }, 1000);
 
         resizeCanvas();
     </script>
